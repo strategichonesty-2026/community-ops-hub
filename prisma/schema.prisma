@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- Better Auth (see /docs/DESIGN.md) ----
+// Configured against our own `users` table, same pattern as ProblemSignal,
+// so the rest of the domain model (OrgMembership, Member.addedByUserId)
+// can hold a normal foreign key to it instead of a table Better Auth owns
+// exclusively.
+
+model User {
+  id            String          @id
+  name          String
+  email         String          @unique
+  emailVerified Boolean         @default(false)
+  image         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  memberships   OrgMembership[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verifications")
+}
+
+// ---- Domain model ----
+// Every domain table below carries organizationId, and nothing in the app
+// layer ever queries Member without scoping by it (see src/lib/org.ts).
+// This is the one architectural decision that can't be revisited later:
+// it's what lets one deployment serve many client organizations instead
+// of forking a codebase per client. See /docs/DESIGN.md.
+
+enum OrgRole {
+  OWNER // you, or whoever operates the platform for this org
+  ADMIN // the org's own staff — full member-management access
+}
+
+enum Niche {
+  GENERIC
+  NONPROFIT
+  CHURCH
+  HOA
+  ASSOCIATION
+  YOUTH_LEAGUE
+}
+
+model Organization {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  niche       Niche           @default(GENERIC)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  memberships OrgMembership[]
+  members     Member[]
+
+  @@map("organizations")
+}
+
+model OrgMembership {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           OrgRole      @default(ADMIN)
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("org_memberships")
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  LAPSED
+}
+
+model Member {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String?
+  phone          String?
+  status         MemberStatus @default(ACTIVE)
+  tags           String[]     @default([])
+  notes          String?
+  joinedAt       DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("members")
+}
