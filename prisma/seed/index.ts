@@ -49,27 +49,39 @@ async function main() {
     where: { organizationId: riverside.id },
   });
   if (existingMembers === 0) {
-    await prisma.member.createMany({
-      data: [
-        {
-          organizationId: riverside.id,
-          name: "Priya Nair",
-          email: "priya@example.com",
-          tags: ["board member"],
-        },
-        {
-          organizationId: riverside.id,
-          name: "Marcus Webb",
-          phone: "555-0142",
-          tags: ["volunteer coach"],
-        },
-        {
-          organizationId: riverside.id,
-          name: "Dana Ostrowski",
-          email: "dana@example.com",
-          status: "LAPSED",
-        },
-      ],
+    const priya = await prisma.member.create({
+      data: {
+        organizationId: riverside.id,
+        name: "Priya Nair",
+        email: "priya@example.com",
+        tags: ["board member"],
+      },
+    });
+    await prisma.member.create({
+      data: {
+        organizationId: riverside.id,
+        name: "Marcus Webb",
+        phone: "555-0142",
+        tags: ["volunteer coach"],
+      },
+    });
+    await prisma.member.create({
+      data: {
+        organizationId: riverside.id,
+        name: "Dana Ostrowski",
+        email: "dana@example.com",
+        status: "LAPSED",
+      },
+    });
+
+    await prisma.payment.create({
+      data: {
+        organizationId: riverside.id,
+        memberId: priya.id,
+        amountCents: 5000,
+        method: "CASH",
+        note: "Spring season dues",
+      },
     });
   }
 

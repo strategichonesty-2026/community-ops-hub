@@ -102,6 +102,7 @@ model Organization {
   updatedAt   DateTime        @updatedAt
   memberships OrgMembership[]
   members     Member[]
+  payments    Payment[]
 
   @@map("organizations")
 }
@@ -139,7 +140,43 @@ model Member {
   joinedAt       DateTime     @default(now())
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  payments       Payment[]
 
   @@index([organizationId])
   @@map("members")
+}
+
+enum PaymentMethod {
+  CASH
+  CHECK
+  ONLINE
+  OTHER
+}
+
+// Recorded manually for v1 — "who paid what, when, and how", regardless of
+// how the money actually changed hands. This is deliberately not a Stripe
+// integration: most of these organizations already collect dues by cash,
+// check, or Venmo/Zelle outside any app, and a ledger that's honest about
+// that is useful today. Online checkout (Stripe) is an additive next step,
+// not a rewrite, once an organization actually wants it — see docs/DESIGN.md.
+//
+// onDelete: Restrict on member (not Cascade) is deliberate: a member who
+// leaves shouldn't be able to take the org's payment history with them.
+// See deleteMember in actions.ts, which checks for this before attempting
+// the delete so the UI can explain it instead of throwing a raw DB error.
+model Payment {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  amountCents    Int
+  method         PaymentMethod @default(CASH)
+  note           String?
+  paidAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([memberId])
+  @@map("payments")
 }
